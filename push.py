@@ -20,7 +20,7 @@ LOCK = HERE / "push.lock"
 LOG = HERE / "push.log"
 QGIF_OUT = HERE / "current.qgif"
 
-MIN_INTERVAL = 3600      # at most one flash write per hour
+MIN_INTERVAL = 1800      # at most one flash write per half hour
 LOCK_STALE = 300         # a lock older than this is from a crashed run
 LOG_LINES = 200
 

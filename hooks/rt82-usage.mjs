@@ -1,7 +1,7 @@
 // Stop hook: refresh the Fable panel on the RT82 screen.
 //
 // Fires after every turn, so it must never block the prompt. A push takes a
-// couple of seconds and only happens at most hourly, but even the skip path
+// couple of seconds and only happens at most every 30 minutes, but even the skip path
 // touches the USB bus - so this spawns push.py fully detached and returns
 // immediately, the same shape statusline.mjs uses for its usage fetch.
 //

@@ -167,7 +167,7 @@ python replay.py <capture>  # replay a WebHID capture verbatim
 python parse_capture.py <capture>   # decode a capture, reassemble its QGIF
 ```
 
-`push.py` writes nothing unless an hour has passed **and** the content
+`push.py` writes nothing unless 30 minutes have passed **and** the content
 signature changed. The signature is the rounded percentage only — deliberately
 not the pixels, since the rendered clock ticks every minute and would make
 every render unique. The mascot's mood is a function of the percentage, so it

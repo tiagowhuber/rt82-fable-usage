@@ -35,7 +35,7 @@ and look at `preview_3x.png`; no device needed.
   first try. Header fps field is `2*fps-1`, frame count follows; later frames
   are delta-coded (bitmap + changed blocks). See README "QGIF is DXT1".
 - Replay of the captured session: 3,184 reports, 5.6s, zero rejections.
-- Gates: hourly timer and content signature both exercised.
+- Gates: 30-minute timer (was hourly until 2026-09-15) and content signature both exercised.
 - Hook returns in ~0.2s; detached child confirmed to run and release its lock.
 
 ## NOT verified
@@ -125,7 +125,7 @@ encoder wants 136).
   minute boundary cannot make the footer differ between frames.
 - Right after a successful push `1919:1919` stays enumerable for a few seconds
   before detaching. `preflight()` run in that window would call it wedged. The
-  hourly gate runs first so the hook never hits this, but a manual `--force`
+  interval gate runs first so the hook never hits this, but a manual `--force`
   immediately after another push might.
 - Each push erases and rewrites keyboard flash. Respect the gates.
 - The hook uses `pythonw.exe`, not `python.exe` — the latter flashes a console
