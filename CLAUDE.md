@@ -24,11 +24,13 @@ change against `replay.py` (known-good bytes) before risking a live push.
 
 Iterate with a **solid-colour test image**, not the real panel — "is the screen
 red?" needs no interpretation, and an all-one-colour frame is the same 16,840
-bytes anyway.
+bytes anyway. For layout work use `python render.py --pct N` (or `--pct none`)
+and look at `preview_3x.png`; no device needed.
 
 ## Verified
 
 - Full push: 301 packets, **2.5s**, on Windows 11, Python 3.14, hidapi 0.15.0.
+- Mascot redesign (2026-09-15): pushed live, sprite crisp, warm palette reads well.
 - Replay of the captured session: 3,184 reports, 5.6s, zero rejections.
 - Gates: hourly timer and content signature both exercised.
 - Hook returns in ~0.2s; detached child confirmed to run and release its lock.
@@ -101,9 +103,21 @@ encoder wants 136).
   Windows) would fix that if it becomes annoying.
 - The gauge reads a cache owned by `~/.claude/statusline.mjs`. Do not add a
   second caller of the usage API; shell out to its `--fetch-usage` flag instead.
-- The content signature deliberately excludes rendered pixels. The panel draws a
-  clock that ticks every minute, so a pixel hash would never match and the
-  change gate would never fire.
+- The content signature is the rounded percentage and nothing else. The panel
+  draws a clock that ticks every minute, so a pixel hash would never match and
+  the change gate would never fire. The mascot's mood derives from the
+  percentage, so it is covered.
+- **Keep the mascot on the 4px grid.** QGIF is DXT1: one 4×4 block holds two
+  colours. `mascot.SCALE = 4` and a 4-aligned origin make every sprite cell one
+  block, verified by decoding the encoder output (0 mixed blocks under the
+  sprite). Move it to an odd offset or scale and the edges smear.
+- QGIF single-frame layout: 10-byte header, 255 × `0xFF`, 16,320 block bytes
+  starting at offset 265, 255 × `0x00` trailer. Useful for decoding our own
+  output offline; a naive "header is 520 bytes" assumption is wrong.
+- Right after a successful push `1919:1919` stays enumerable for a few seconds
+  before detaching. `preflight()` run in that window would call it wedged. The
+  hourly gate runs first so the hook never hits this, but a manual `--force`
+  immediately after another push might.
 - Each push erases and rewrites keyboard flash. Respect the gates.
 - The hook uses `pythonw.exe`, not `python.exe` — the latter flashes a console
   window on every turn.

@@ -5,9 +5,11 @@ Claude Code `Stop` hook.
 
 ![panel](docs/preview.png)
 
-The panel shows the Fable weekly percentage, a colour-coded bar, time until
-reset, and a seven-day sparkline of Fable-only token burn read from the local
-transcripts.
+The panel shows the Fable weekly percentage, a colour-coded gauge, the time
+the frame was rendered, and a pixel-art Clawd whose face tracks the number:
+happy under 70%, worried to 90%, alarmed above, asleep when usage is unknown.
+The clock is deliberate: in 2.4GHz mode the screen holds its last frame, so
+the stamp says how stale the number is.
 
 ## Why this exists as its own implementation
 
@@ -82,6 +84,15 @@ A solid red frame encodes as `45 d9 00 00 00 00 00 00` repeated: `0xD945` is
 RGB565 for `(220,40,40)`, second colour black, all indices zero. The fixed output
 size is the format working correctly, not a broken encoder.
 
+The single-frame file layout, confirmed by decoding our own output: 10-byte
+header (`QGIF` + 6 bytes), 255 bytes of `0xFF`, 16,320 block bytes in row-major
+order (60 × 34 blocks), then 255 bytes of `0x00`. Blocks start at offset 265.
+
+Because every 4×4 block holds only two colours plus two interpolants, the
+mascot is drawn on a 4px grid at a 4px-aligned origin: each sprite cell is
+exactly one block, so it comes through pixel-perfect. Anti-aliased text does
+not get that treatment and looks slightly soft, which is fine at this size.
+
 The prebuilt `test_qgif.exe` in the rt82display wheel produces this correctly and
 runs fine on Windows. The pure-Python `qgif.py` in the same package produces the
 documented-but-fictional RLE format, which the screen will not display.
@@ -135,6 +146,7 @@ never blocks the prompt and never flashes a console window.
 
 ```
 python render.py            # render preview.png only, no device access
+python render.py --pct 95   # preview a specific percentage / mood (--pct none = asleep)
 python push.py              # honour both gates (this is what the hook runs)
 python push.py --force      # push regardless
 python push.py --verbose    # log why it skipped
@@ -143,9 +155,10 @@ python parse_capture.py <capture>   # decode a capture, reassemble its QGIF
 ```
 
 `push.py` writes nothing unless an hour has passed **and** the content
-signature changed. The signature covers percentage, whole hours to reset, and
-the seven daily totals — deliberately not the pixels, since the rendered clock
-ticks every minute and would make every render unique.
+signature changed. The signature is the rounded percentage only — deliberately
+not the pixels, since the rendered clock ticks every minute and would make
+every render unique. The mascot's mood is a function of the percentage, so it
+needs no separate key.
 
 Each push erases and rewrites keyboard flash, hence the gates.
 
@@ -155,11 +168,7 @@ Each push erases and rewrites keyboard flash, hence the gates.
   `%TEMP%/cc-statusline-usage.json`. Only that script talks to the usage API; if
   the cache is older than 10 minutes this shells out to its existing
   `--fetch-usage` flag.
-- **Sparkline**: `~/.claude/projects/**/*.jsonl`, filtered to
-  `message.model == "claude-fable-5-1"`, deduped by `message.id`, bucketed by
-  local date. Weighted `input + output + cache_creation + 0.1 × cache_read`,
-  because cache reads bill at roughly a tenth and otherwise dominate ~10:1,
-  flattening every bar to the same height.
+- **Mascot**: `mascot.py`, four 16×16 hand-drawn grids, one per mood.
 
 ## Licensing
 
