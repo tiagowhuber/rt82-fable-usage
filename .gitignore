@@ -1,0 +1,12 @@
+venv/
+__pycache__/
+*.pyc
+
+# runtime artifacts, regenerated on every push
+state.json
+push.log
+push.lock
+current.qgif
+preview.png
+preview_3x.png
+*.qgif

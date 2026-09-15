@@ -1,0 +1,6 @@
+hidapi>=0.15.0
+Pillow>=10.0.0
+# installed only for the prebuilt DXT1 encoder in rt82display/_bin/test_qgif.exe.
+# never `import rt82display` - its __init__ pulls in .cli, which imports fcntl
+# and is therefore unimportable on Windows.
+rt82display>=0.6.1
