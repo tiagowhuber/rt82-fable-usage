@@ -110,7 +110,14 @@ encoder wants 136).
 - **Keep the mascot on the 4px grid.** QGIF is DXT1: one 4×4 block holds two
   colours. `mascot.SCALE = 4` and a 4-aligned origin make every sprite cell one
   block, verified by decoding the encoder output (0 mixed blocks under the
-  sprite). Move it to an odd offset or scale and the edges smear.
+  sprite, all four moods). Move it to an odd offset or scale and the edges
+  smear. The sprite is 24×21 cells = 96×84px; the number column starts at
+  x=116 and `_fit()` shrinks the font so `100%` still fits.
+- The mascot body is traced from a 9-frame bobbing GIF (rest pose = frames 0
+  and 4; the others shift the body by one cell). When multi-frame QGIF works,
+  those frames are a ready-made animation. The sampling recipe is 24×21 cells
+  of 12.5px from origin (78,118) in the 480px GIF, majority vote over a 5×5
+  patch per cell.
 - QGIF single-frame layout: 10-byte header, 255 × `0xFF`, 16,320 block bytes
   starting at offset 265, 255 × `0x00` trailer. Useful for decoding our own
   output offline; a naive "header is 520 bytes" assumption is wrong.

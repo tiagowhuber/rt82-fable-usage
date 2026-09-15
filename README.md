@@ -6,7 +6,8 @@ Claude Code `Stop` hook.
 ![panel](docs/preview.png)
 
 The panel shows the Fable weekly percentage, a colour-coded gauge, the time
-the frame was rendered, and a pixel-art Clawd whose face tracks the number:
+the frame was rendered, and a pixel-art Clawd in headphones whose face tracks
+the number:
 happy under 70%, worried to 90%, alarmed above, asleep when usage is unknown.
 The clock is deliberate: in 2.4GHz mode the screen holds its last frame, so
 the stamp says how stale the number is.
@@ -168,7 +169,10 @@ Each push erases and rewrites keyboard flash, hence the gates.
   `%TEMP%/cc-statusline-usage.json`. Only that script talks to the usage API; if
   the cache is older than 10 minutes this shells out to its existing
   `--fetch-usage` flag.
-- **Mascot**: `mascot.py`, four 16×16 hand-drawn grids, one per mood.
+- **Mascot**: `mascot.py`. A 24×21-cell body traced from the rest pose of a
+  Clawd-with-headphones animation, plus four face overlays, one per mood. The
+  source GIF bobs over 9 frames; only the rest pose is used until multi-frame
+  QGIF is proven.
 
 ## Licensing
 

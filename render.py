@@ -33,9 +33,11 @@ DIM = (150, 140, 128)
 ACCENT = (217, 119, 87)
 TRACK = (56, 50, 46)
 
-MASCOT_XY = (12, 24)          # multiples of 4: see mascot.py on DXT1 blocks
-RIGHT = W - 12                # right edge for the number column
-COL_LEFT = MASCOT_XY[0] + mascot.SIZE * mascot.SCALE + 12
+MASCOT_XY = (8, 8)            # multiples of 4: see mascot.py on DXT1 blocks
+MASCOT_W = mascot.COLS * mascot.SCALE
+MASCOT_H = mascot.ROWS * mascot.SCALE
+RIGHT = W - 8                 # right edge for the number column
+COL_LEFT = MASCOT_XY[0] + MASCOT_W + 12
 
 
 def level_color(pct: float):
@@ -121,13 +123,12 @@ def render(pct) -> Image.Image:
     label = f"{int(round(pct))}%" if known else "--"
     f_big, bb = _fit(dr, label, BOLD, 60, RIGHT - COL_LEFT)
     tw, th = bb[2] - bb[0], bb[3] - bb[1]
-    m_top, m_h = MASCOT_XY[1], mascot.SIZE * mascot.SCALE
-    cy = m_top + m_h / 2 + 4
+    cy = MASCOT_XY[1] + MASCOT_H / 2 + 6
     dr.text((RIGHT - tw - bb[0], cy - th / 2 - bb[1]), label,
             font=f_big, fill=accent)
 
     # gauge, full width
-    x0, x1, y, th = 12, RIGHT, 96, 12
+    x0, x1, y, th = 8, RIGHT, 100, 12
     dr.rounded_rectangle([x0, y, x1, y + th], radius=6, fill=TRACK)
     if known and pct > 0:
         fill_w = int((x1 - x0) * min(1.0, pct / 100))
@@ -138,7 +139,7 @@ def render(pct) -> Image.Image:
     # when this frame was rendered; the screen may hold it for days
     stamp = f"{datetime.now():%H:%M}"
     foot = f"updated {stamp}" if known else f"usage unavailable  \u00b7  {stamp}"
-    dr.text((12, 114), foot, font=font(REG, 12), fill=DIM)
+    dr.text((8, 118), foot, font=font(REG, 12), fill=DIM)
     return img
 
 
