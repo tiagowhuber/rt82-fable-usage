@@ -99,19 +99,61 @@ def mood_for(pct: float | None) -> str:
     return "happy"
 
 
-def draw(img: Image.Image, x: int, y: int, mood: str, scale: int = SCALE) -> None:
-    """Paint the sprite with its top-left cell at (x, y)."""
+# Body parts as cell regions (row0, row1, col0, col1), inclusive. Painted in
+# this order so the head covers a raised arm where they overlap.
+PARTS = {
+    "arm_l": (11, 16, 0, 3),
+    "arm_r": (11, 16, 20, 23),
+    "legs": (17, 20, 0, 23),
+    "torso": (11, 16, 4, 19),
+    "head": (0, 10, 0, 23),
+}
+
+# One loop of the animation as per-part (dx, dy) cell offsets. Modelled on the
+# reference GIF: a hop to each side and a little wave. Played at FPS.
+ANIMATION = [
+    {},
+    {"head": (-1, -1), "torso": (-1, -1), "legs": (-1, -1),
+     "arm_l": (-1, -2), "arm_r": (-1, -1)},
+    {},
+    {"arm_l": (0, -1)},
+    {"head": (1, -1), "torso": (1, -1), "legs": (1, -1),
+     "arm_l": (1, -1), "arm_r": (1, -2)},
+    {"arm_r": (0, -1)},
+]
+FPS = 5
+
+# The loop moves parts at most this far, so callers can leave a margin.
+MAX_DX = max(abs(dx) for f in ANIMATION for dx, _ in f.values())
+MAX_DY = max(abs(dy) for f in ANIMATION for _, dy in f.values())
+
+
+def draw(img: Image.Image, x: int, y: int, mood: str, frame: int = 0,
+         scale: int = SCALE) -> None:
+    """Paint one animation frame with the rest pose's top-left cell at (x, y)."""
     dr = ImageDraw.Draw(img)
-    for r, row in enumerate(sprite(mood)):
-        for c, ch in enumerate(row):
-            colour = PALETTE.get(ch)
-            if colour is None:
-                continue
-            x0, y0 = x + c * scale, y + r * scale
-            dr.rectangle([x0, y0, x0 + scale - 1, y0 + scale - 1], fill=colour)
+    grid = sprite(mood)
+    offsets = ANIMATION[frame % len(ANIMATION)]
+    for part, (r0, r1, c0, c1) in PARTS.items():
+        dx, dy = offsets.get(part, (0, 0))
+        for r in range(r0, r1 + 1):
+            for c in range(c0, c1 + 1):
+                colour = PALETTE.get(grid[r][c])
+                if colour is None:
+                    continue
+                x0 = x + (c + dx) * scale
+                y0 = y + (r + dy) * scale
+                dr.rectangle([x0, y0, x0 + scale - 1, y0 + scale - 1],
+                             fill=colour)
 
 
 def _check() -> None:
+    covered = [[0] * COLS for _ in range(ROWS)]
+    for r0, r1, c0, c1 in PARTS.values():
+        for r in range(r0, r1 + 1):
+            for c in range(c0, c1 + 1):
+                covered[r][c] += 1
+    assert all(v == 1 for row in covered for v in row), "PARTS must tile the grid"
     assert len(BASE) == ROWS
     for i, row in enumerate(BASE):
         assert len(row) == COLS, f"base row {i}: {len(row)} cells"

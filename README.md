@@ -3,11 +3,11 @@
 Puts Claude Code's Fable usage on the LCD of an Epomaker RT82, refreshed by a
 Claude Code `Stop` hook.
 
-![panel](docs/preview.png)
+![panel](docs/preview.gif)
 
 The panel shows the Fable weekly percentage, a colour-coded gauge, the time
-the frame was rendered, and a pixel-art Clawd in headphones whose face tracks
-the number:
+the frame was rendered, and an animated pixel-art Clawd in headphones whose
+face tracks the number:
 happy under 70%, worried to 90%, alarmed above, asleep when usage is unknown.
 The clock is deliberate: in 2.4GHz mode the screen holds its last frame, so
 the stamp says how stale the number is.
@@ -85,9 +85,21 @@ A solid red frame encodes as `45 d9 00 00 00 00 00 00` repeated: `0xD945` is
 RGB565 for `(220,40,40)`, second colour black, all indices zero. The fixed output
 size is the format working correctly, not a broken encoder.
 
-The single-frame file layout, confirmed by decoding our own output: 10-byte
-header (`QGIF` + 6 bytes), 255 bytes of `0xFF`, 16,320 block bytes in row-major
-order (60 × 34 blocks), then 255 bytes of `0x00`. Blocks start at offset 265.
+File layout, confirmed by decoding our own output and matching it against the
+official tool's 39-frame capture:
+
+```
+QGIF  u16be (2*fps - 1)  u16be frame_count  3b 21      10-byte header
+then per frame:
+  255-byte bitmap, one bit per 4x4 block (2040 blocks = 60 x 34)
+  8 bytes per block whose bit is set, row-major
+finally one more bitmap+blocks: the delta from the last frame back to the first
+```
+
+The first frame's bitmap is all `0xFF` (every block), so a single frame is
+10 + 255 + 16,320 + 255 = 16,840 bytes. Later frames carry only the blocks that
+changed, which is why the official tool's 39 frames fit in 176,050 bytes and
+why animating the mascot costs ~1.2 KB per frame instead of 16 KB.
 
 Because every 4×4 block holds only two colours plus two interpolants, the
 mascot is drawn on a 4px grid at a 4px-aligned origin: each sprite cell is
@@ -171,8 +183,10 @@ Each push erases and rewrites keyboard flash, hence the gates.
   `--fetch-usage` flag.
 - **Mascot**: `mascot.py`. A 24×21-cell body traced from the rest pose of a
   Clawd-with-headphones animation, plus four face overlays, one per mood. The
-  source GIF bobs over 9 frames; only the rest pose is used until multi-frame
-  QGIF is proven.
+  body is split into parts (head, torso, arms, legs) and a 6-frame loop at
+  5 fps moves them by whole cells: a hop each way and a wave with each arm.
+  The keyboard loops the frames itself, so animation costs no USB traffic
+  after the push.
 
 ## Licensing
 

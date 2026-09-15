@@ -31,6 +31,9 @@ and look at `preview_3x.png`; no device needed.
 
 - Full push: 301 packets, **2.5s**, on Windows 11, Python 3.14, hidapi 0.15.0.
 - Mascot redesign (2026-09-15): pushed live, sprite crisp, warm palette reads well.
+- **Multi-frame QGIF** (2026-09-15): 6 frames, 22,979 bytes, 2.6s, accepted
+  first try. Header fps field is `2*fps-1`, frame count follows; later frames
+  are delta-coded (bitmap + changed blocks). See README "QGIF is DXT1".
 - Replay of the captured session: 3,184 reports, 5.6s, zero rejections.
 - Gates: hourly timer and content signature both exercised.
 - Hook returns in ~0.2s; detached child confirmed to run and release its lock.
@@ -42,7 +45,6 @@ and look at `preview_3x.png`; no device needed.
 - **`screen_index` other than 0.** `upload()` takes the parameter and the
   protocol has the field, but every test wrote slot 0. Writing to slots 1/2 to
   preserve an existing GIF is plausible, unproven, and would need a live test.
-- **Multi-frame QGIF.** Only single frames have been pushed.
 - Any firmware other than the one on this keyboard.
 
 ## Dead ends — do not retry
@@ -78,12 +80,6 @@ encoder wants 136).
 
 ## Open questions
 
-- **QGIF header bytes 4–7.** Ours reads `51 47 49 46 00 0f 00 01 3b 21`, the
-  official tool's `51 47 49 46 00 13 00 27 3b 21`. `3b 21` is constant. The two
-  differing 16-bit fields are probably frame count and delay/fps in some order,
-  but that is untested. **This needs answering before multi-frame animation
-  will work** — the rotating multi-stat idea depends on it. Encode with varying
-  `fps` and frame counts and diff the headers; no device needed.
 - Whether `AA 1C` repetition counts matter (3 before `1B`, 9 in the trailer) or
   whether they are just the web UI polling status.
 
@@ -91,7 +87,10 @@ encoder wants 136).
 
 - **Rotating multi-stat**: one animation whose frames cycle Fable weekly /
   5-hour session / spend. The keyboard loops frames itself, so it costs no extra
-  USB traffic — upload once, rotate forever. Blocked on the header question.
+  USB traffic — upload once, rotate forever. Unblocked now that multi-frame
+  works; but a frame that changes the whole number column costs ~2-3 KB, and
+  the 5h/7d buckets are not in the usage cache yet (statusline.mjs filters to
+  `weekly_scoped`).
 - **Threshold alerts**: leave a normal GIF up, only push a loud red panel above
   85%. Near-zero flash writes.
 - **Slot preservation**: write to slot 1 and leave the user's own GIF in slot 0.
@@ -118,9 +117,12 @@ encoder wants 136).
   those frames are a ready-made animation. The sampling recipe is 24×21 cells
   of 12.5px from origin (78,118) in the 480px GIF, majority vote over a 5×5
   patch per cell.
-- QGIF single-frame layout: 10-byte header, 255 × `0xFF`, 16,320 block bytes
-  starting at offset 265, 255 × `0x00` trailer. Useful for decoding our own
-  output offline; a naive "header is 520 bytes" assumption is wrong.
+- QGIF layout: 10-byte header, then per frame a 255-byte block bitmap plus 8
+  bytes per set bit, then a closing delta back to frame 0. Frame 0's blocks
+  start at offset 265. The animation moves parts by whole cells only, so every
+  delta frame is also pixel-perfect (0 mixed blocks, checked).
+- Animation frames share one clock stamp (`render.frames` passes `now`), so a
+  minute boundary cannot make the footer differ between frames.
 - Right after a successful push `1919:1919` stays enumerable for a few seconds
   before detaching. `preflight()` run in that window would call it wedged. The
   hourly gate runs first so the hook never hits this, but a manual `--force`

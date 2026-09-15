@@ -114,14 +114,14 @@ def main() -> int:
         return 0
 
     try:
-        img, sig = render.build()
+        frames, sig = render.build()
         digest = hashlib.sha256(sig.encode()).hexdigest()
         if not force and digest == state.get("image_hash"):
             log("skip: nothing worth redrawing")
             return 0
 
-        img.save(HERE / "preview.png")
-        data = qgif.encode([img], QGIF_OUT)
+        frames[0].save(HERE / "preview.png")
+        data = qgif.encode(frames, QGIF_OUT, fps=render.mascot.FPS)
 
         try:
             up.preflight()
@@ -132,7 +132,8 @@ def main() -> int:
         elapsed = up.upload(data, screen_index=0, log=lambda *_: None,
                             progress_every=0)
         pct, _ = render.read_usage(refresh=False)
-        log(f"pushed Fable {pct}% - {len(data)} bytes in {elapsed:.1f}s")
+        log(f"pushed Fable {pct}% - {len(frames)} frames, {len(data)} bytes "
+            f"in {elapsed:.1f}s")
         write_state({"last_push": time.time(), "image_hash": digest,
                      "pct": pct,
                      "at": datetime.now().isoformat(timespec="seconds")})

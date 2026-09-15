@@ -33,7 +33,8 @@ DIM = (150, 140, 128)
 ACCENT = (217, 119, 87)
 TRACK = (56, 50, 46)
 
-MASCOT_XY = (8, 8)            # multiples of 4: see mascot.py on DXT1 blocks
+MASCOT_XY = (8, 12)           # multiples of 4: see mascot.py on DXT1 blocks
+# the animation moves parts up to MAX_DX/MAX_DY cells; (8, 12) leaves room
 MASCOT_W = mascot.COLS * mascot.SCALE
 MASCOT_H = mascot.ROWS * mascot.SCALE
 RIGHT = W - 8                 # right edge for the number column
@@ -103,13 +104,16 @@ def _fit(dr, text, name, size, max_w):
     return f, dr.textbbox((0, 0), text, font=f)
 
 
-def render(pct) -> Image.Image:
+def render(pct, frame: int = 0, now: datetime | None = None) -> Image.Image:
+    """One frame of the panel. `now` is shared across frames so the stamp
+    cannot tick over between them."""
     img = Image.new("RGB", (W, H), BG)
     dr = ImageDraw.Draw(img)
     known = pct is not None
     accent = level_color(pct) if known else DIM
+    now = now or datetime.now()
 
-    mascot.draw(img, *MASCOT_XY, mascot.mood_for(pct))
+    mascot.draw(img, *MASCOT_XY, mascot.mood_for(pct), frame)
 
     # label, top of the number column: "FABLE  weekly", right-aligned
     f_lab, f_sub = font(BOLD, 12), font(REG, 12)
@@ -137,7 +141,7 @@ def render(pct) -> Image.Image:
                                  fill=accent)
 
     # when this frame was rendered; the screen may hold it for days
-    stamp = f"{datetime.now():%H:%M}"
+    stamp = f"{now:%H:%M}"
     foot = f"updated {stamp}" if known else f"usage unavailable  \u00b7  {stamp}"
     dr.text((8, 118), foot, font=font(REG, 12), fill=DIM)
     return img
@@ -153,9 +157,15 @@ def signature(pct) -> str:
     return json.dumps({"pct": None if pct is None else round(pct)})
 
 
-def build(refresh: bool = True) -> tuple[Image.Image, str]:
+def frames(pct) -> list[Image.Image]:
+    """Every frame of the animation loop, sharing one clock stamp."""
+    now = datetime.now()
+    return [render(pct, i, now) for i in range(len(mascot.ANIMATION))]
+
+
+def build(refresh: bool = True) -> tuple[list[Image.Image], str]:
     pct, _ = read_usage(refresh)
-    return render(pct), signature(pct)
+    return frames(pct), signature(pct)
 
 
 def _arg_pct(argv) -> tuple[bool, float | None]:
@@ -170,8 +180,11 @@ if __name__ == "__main__":
     given, pct = _arg_pct(sys.argv)
     if not given:
         pct, _ = read_usage("--no-refresh" not in sys.argv)
-    img = render(pct)
-    img.save(HERE / "preview.png")
-    img.resize((W * 3, H * 3), Image.NEAREST).save(HERE / "preview_3x.png")
-    print(f"Fable {pct}%  mood={mascot.mood_for(pct)}")
-    print(f"wrote {HERE / 'preview.png'}")
+    fr = frames(pct)
+    fr[0].save(HERE / "preview.png")
+    fr[0].resize((W * 3, H * 3), Image.NEAREST).save(HERE / "preview_3x.png")
+    big = [f.resize((W * 3, H * 3), Image.NEAREST) for f in fr]
+    big[0].save(HERE / "preview.gif", save_all=True, append_images=big[1:],
+                duration=1000 // mascot.FPS, loop=0)
+    print(f"Fable {pct}%  mood={mascot.mood_for(pct)}  frames={len(fr)}")
+    print(f"wrote {HERE / 'preview.png'} and preview.gif")
