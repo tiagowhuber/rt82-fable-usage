@@ -2,11 +2,12 @@ venv/
 __pycache__/
 *.pyc
 
-# runtime artifacts, regenerated on every push
-state.json
-push.log
-push.lock
-current.qgif
-preview.png
-preview_3x.png
-*.qgif
+# runtime artifacts, regenerated on every push - anchored to the root so that
+# committed images under docs/ are not swallowed
+/state.json
+/push.log
+/push.lock
+/current.qgif
+/preview.png
+/preview_3x.png
+/*.qgif
