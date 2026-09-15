@@ -28,10 +28,10 @@ PALETTE = {
 # fmt: off
 BASE = [
     "........bbbbbbbb........",
-    "......bbwwwwwwwwbb......",
-    ".....bwwwwwwwwwwwwb.....",
-    "....bwwwwwwwwwwwwwwb....",
-    "....bwwwwwwwwwwwwwwb....",
+    "......bb........bb......",
+    ".....b............b.....",
+    "....b..............b....",
+    "....b..............b....",
     "...bboooooooooooooobb...",
     "..bbboooooooooooooobbb..",
     "..bbboooooooooooooobbb..",
