@@ -90,6 +90,7 @@ def main() -> int:
     import hid  # noqa: E402
     import render  # noqa: E402
     import qgif  # noqa: E402
+    import slots  # noqa: E402
     import upload as up  # noqa: E402
 
     state = read_state()
@@ -121,6 +122,9 @@ def main() -> int:
 
     try:
         frames, sig = render.build()
+        extra = slots.load(log)
+        # a changed GIF in slot 1/2 is as good a reason to push as a new percentage
+        sig += "|" + "|".join(hashlib.sha256(b).hexdigest()[:16] for b in extra)
         digest = hashlib.sha256(sig.encode()).hexdigest()
         if not force and digest == state.get("image_hash"):
             log("skip: nothing worth redrawing")
@@ -135,11 +139,11 @@ def main() -> int:
             log(f"skip: {e}")
             return 1
 
-        elapsed = up.upload(data, screen_index=0, log=lambda *_: None,
+        elapsed = up.upload([data] + extra, log=lambda *_: None,
                             progress_every=0)
         pct, _ = render.read_usage(refresh=False)
-        log(f"pushed Fable {pct}% - {len(frames)} frames, {len(data)} bytes "
-            f"in {elapsed:.1f}s")
+        log(f"pushed Fable {pct}% - {len(frames)} frames, {len(data)} bytes, "
+            f"+{len(extra)} slot(s) in {elapsed:.1f}s")
         write_state({"last_push": time.time(), "image_hash": digest,
                      "pct": pct,
                      "at": datetime.now().isoformat(timespec="seconds")})

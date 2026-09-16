@@ -241,84 +241,156 @@ def activate(kbd: Link) -> None:
         kbd.send([MAGIC, CMD_HANDSHAKE], delay=0.02)
 
 
-def upload(data: bytes, screen_index: int = 0, log=print,
-           progress_every: int = 100) -> float:
-    """Push a QGIF to the screen. Returns elapsed seconds."""
+BLOCK = 65536  # flash erase block; every slot starts on a block boundary
+
+
+@dataclass
+class Plan:
+    """Where each slot's bytes go and what the setup packets must say.
+
+    From the official tool's three-GIF capture: slot k starts at the first
+    block boundary after slot k-1 ends, the data phase sends only real bytes
+    (offsets jump across the gaps), and the erase count is the number of
+    blocks the last byte reaches into. Upstream's `+ 1` on the erase count
+    matches neither capture.
+    """
+
+    slots: list[bytes]
+    offsets: list[int]
+    end: int
+    erase: int
+
+    @classmethod
+    def build(cls, slots: list[bytes]) -> "Plan":
+        if not slots:
+            raise TransportError("nothing to upload")
+        if len(slots) > 3:
+            raise TransportError(f"{len(slots)} slots; the screen has 3")
+        offsets, pos = [], 0
+        for data in slots:
+            offsets.append(pos)
+            pos = -(-(pos + len(data)) // BLOCK) * BLOCK   # next block boundary
+        end = offsets[-1] + len(slots[-1])
+        return cls(slots, offsets, end, max(1, -(-end // BLOCK)))
+
+    @property
+    def count(self) -> int:
+        return len(self.slots)
+
+    def setup_packet(self) -> list[int]:
+        # aa 15 00 00 00 38 00 00 | idx0 count erase 00 00 size0(3) | idx 00 size(3) ...
+        pkt = [MAGIC, 0x15, 0, 0, 0, SCREEN_PARAM, 0, 0,
+               0, self.count, self.erase, 0, 0] + _u24(len(self.slots[0]))
+        for k in range(1, self.count):
+            pkt += [k, 0] + _u24(len(self.slots[k]))
+        return pkt
+
+
+def _u24(n: int) -> list[int]:
+    return [n & 0xFF, (n >> 8) & 0xFF, (n >> 16) & 0xFF]
+
+
+def sequence(slots: list[bytes], chunk_size: int = 56, now=None):
+    """Every packet of a transfer, in order: (iface, payload, opts).
+
+    Pure, so a dry run can be diffed against a WebHID capture before anything
+    is sent. `upload()` plays exactly this list.
+    """
+    plan = Plan.build(slots)
+    K, L = "kbd", "lcd"
+    seq = [(K, [MAGIC, CMD_INIT], {"delay": 0.02})]
+    seq += [(K, [MAGIC, CMD_HANDSHAKE], {"delay": 0.02}) for _ in range(7)]
+
+    seq += [
+        (L, [MAGIC, 0x10], {}),
+        (L, _clock_packet(now), {}),
+        (L, [MAGIC, 0x11], {}),
+        (L, [MAGIC, 0x1C], {}),
+        (L, [MAGIC, 0x10], {}),
+        (L, [MAGIC, 0x12, 0, 0, 0, SCREEN_PARAM], {}),
+        (L, [MAGIC, 0x11], {}),
+    ]
+    seq += [(L, [MAGIC, 0x1C], {}) for _ in range(3)]
+    seq.append((L, [MAGIC, 0x1B, 0, 0, 0, SCREEN_PARAM], {}))
+    # getGifCount/setGifCount on the keyboard, after 0x1B - and only here.
+    # Upstream also sends an 0xE3 on the LCD interface, which the official
+    # tool never does and which makes the device reject the first data packet.
+    seq.append((K, [MAGIC, 0xE3, 0, 0, 0, 1, 0, 0, plan.count],
+                {"close_after": True}))
+    seq += [
+        (L, [MAGIC, 0x14, 0, 0, 0, SCREEN_PARAM], {}),
+        (L, plan.setup_packet(), {"log": f"transfer setup: {plan.count} slot(s), "
+                                          f"{plan.end} bytes, {plan.erase} flash blocks"}),
+        (L, [MAGIC, 0x15, SCREEN_PARAM, 0, 0, SCREEN_PARAM], {}),
+        (L, [MAGIC, 0x15, 0x70, 0, 0, 0x10], {}),
+        (L, [MAGIC, 0x16, 0, 0, 0, SCREEN_PARAM], {}),
+        (L, [MAGIC, 0x18, 0, 0, 0, 1, 0, 0, plan.erase],
+         {"sleep_after": 0.5 * plan.erase + 0.5, "log": "erasing"}),
+    ]
+    for data, base in zip(plan.slots, plan.offsets):
+        for off in range(0, len(data), chunk_size):
+            chunk = data[off:off + chunk_size]
+            pos = base + off
+            seq.append((L, [MAGIC, 0x19] + _u24(pos) + [len(chunk), 0, 0] + list(chunk),
+                        {"flow_ms": 10, "data": True,
+                         "context": f"data packet offset {pos}"}))
+    seq += [
+        (L, [MAGIC, 0x1A], {}),
+        (L, [MAGIC, 0x10], {}),
+        (L, _clock_packet(now), {}),
+        (L, [MAGIC, 0x11], {}),
+        (L, [MAGIC, 0x11], {}),
+    ]
+    seq += [(L, [MAGIC, 0x1C], {}) for _ in range(9)]
+    return seq
+
+
+def upload(slots: bytes | list[bytes], log=print, progress_every: int = 100) -> float:
+    """Push one or more QGIFs to the screen's slots. Returns elapsed seconds.
+
+    Slot 0 is what the screen shows first; the user cycles with Fn+<key>.
+    The firmware keeps only what this transfer declares, so every slot that
+    should survive must be sent every time - that is what the official tool
+    does too.
+    """
+    if isinstance(slots, (bytes, bytearray)):
+        slots = [bytes(slots)]
     preflight()
-    size = len(data)
-    erase = (size + 65535) // 65536 + 1
     t0 = time.time()
 
     log("activating")
     kbd = open_keyboard(log)
-    activate(kbd)
-    lcd = open_lcd(log=log)
-
-    chunk_size = lcd.payload - 8
-    if chunk_size < 1:
-        raise TransportError(f"lcd payload {lcd.payload} too small for data packets")
-
+    lcd = None
     try:
-        log("entering download mode")
-        lcd.send([MAGIC, 0x10])
-        lcd.send(_clock_packet())
-        lcd.send([MAGIC, 0x11])
-        lcd.send([MAGIC, 0x1C])
-        lcd.send([MAGIC, 0x10])
-        lcd.send([MAGIC, 0x12, 0, 0, 0, SCREEN_PARAM])
-        lcd.send([MAGIC, 0x11])
-        for _ in range(3):
-            lcd.send([MAGIC, 0x1C])
-
-        lcd.send([MAGIC, 0x1B, 0, 0, 0, SCREEN_PARAM])
-        # getGifCount, on the keyboard, after 0x1B - and only here. Upstream
-        # also sends an 0xE3 on the LCD interface, which the official tool
-        # never does and which makes the device reject the first data packet.
-        kbd.send([MAGIC, 0xE3, 0, 0, 0, 1, 0, 0, 1])
-        kbd.close()
-
-        lcd.send([MAGIC, 0x14, 0, 0, 0, SCREEN_PARAM])
-
-        log(f"transfer setup: {size} bytes, {erase} flash blocks, "
-            f"{chunk_size}-byte chunks")
-        lcd.send([MAGIC, 0x15, 0, 0, 0, SCREEN_PARAM, 0, 0,
-                  screen_index, 1, erase, 0, 0,
-                  size & 0xFF, (size >> 8) & 0xFF, (size >> 16) & 0xFF])
-        lcd.send([MAGIC, 0x15, SCREEN_PARAM, 0, 0, SCREEN_PARAM])
-        lcd.send([MAGIC, 0x15, 0x70, 0, 0, 0x10])
-        lcd.send([MAGIC, 0x16, 0, 0, 0, SCREEN_PARAM])
-        lcd.send([MAGIC, 0x18, 0, 0, 0, 1, 0, 0, erase])
-        wait = 0.5 * erase + 0.5
-        log(f"erasing, waiting {wait:.1f}s")
-        time.sleep(wait)
-
-        total = (size + chunk_size - 1) // chunk_size
-        log(f"sending {total} packets")
-        off = 0
-        n = 0
-        while off < size:
-            chunk = data[off:off + chunk_size]
-            clen = len(chunk)
-            lcd.send([MAGIC, 0x19, off & 0xFF, (off >> 8) & 0xFF,
-                      (off >> 16) & 0xFF, clen, 0, 0]
-                     + list(chunk) + [0] * (chunk_size - clen),
-                     context=f"data packet {n + 1}/{total} offset {off}",
-                     flow_ms=10)
-            off += chunk_size
-            n += 1
-            if progress_every and (n % progress_every == 0 or n == total):
-                log(f"  {n}/{total} ({n * 100 // total}%)")
-
+        total = n = 0
+        for iface, pkt, opts in sequence(slots):
+            if iface == "kbd":
+                kbd.send(pkt, delay=opts.get("delay", 0.0))
+                if opts.get("close_after"):
+                    kbd.close()
+                continue
+            if lcd is None:
+                lcd = open_lcd(log=log)
+                chunk = lcd.payload - 8
+                if chunk != 56:
+                    # the sequence was laid out for the captured 64-byte reports
+                    raise TransportError(
+                        f"lcd payload {lcd.payload}: unexpected report size, refusing")
+                total = sum(1 for _, _, o in sequence(slots) if o.get("data"))
+            if "log" in opts:
+                log(opts["log"])
+            lcd.send(pkt, context=opts.get("context", ""),
+                     flow_ms=opts.get("flow_ms", 50))
+            if opts.get("data"):
+                n += 1
+                if progress_every and (n % progress_every == 0 or n == total):
+                    log(f"  {n}/{total} ({n * 100 // total}%)")
+            if "sleep_after" in opts:
+                time.sleep(opts["sleep_after"])
         log("finalizing")
-        lcd.send([MAGIC, 0x1A])
-        lcd.send([MAGIC, 0x10])
-        lcd.send(_clock_packet())
-        lcd.send([MAGIC, 0x11])
-        lcd.send([MAGIC, 0x11])
-        for _ in range(9):
-            lcd.send([MAGIC, 0x1C])
     finally:
-        lcd.close()
+        if lcd is not None:
+            lcd.close()
         kbd.close()
 
     return time.time() - t0

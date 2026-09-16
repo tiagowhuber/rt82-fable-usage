@@ -173,7 +173,44 @@ not the pixels, since the rendered clock ticks every minute and would make
 every render unique. The mascot's mood is a function of the percentage, so it
 needs no separate key.
 
-Each push erases and rewrites keyboard flash, hence the gates.
+Each push erases and rewrites keyboard flash, hence the gates. A `PAUSED`
+file next to `push.py` stops automatic pushes without touching anything else;
+`--force` ignores it.
+
+## Your own GIFs on screens 2 and 3
+
+The firmware keeps only the GIFs a transfer declares, so a push that sends
+just the panel deletes everything else (learned the hard way). Every push
+therefore sends all slots, exactly like the official tool does. Drop your
+files in `slots/` next to `push.py`:
+
+```
+slots/slot1.gif    -> screen 2     any GIF/PNG; letterboxed to 240x136 and
+slots/slot2.gif    -> screen 3        encoded on first use, cached as slotN.qgif
+slots/slot1.qgif   -> already-encoded QGIF is used as-is
+```
+
+Slot 0 is always the panel. Changing a slot file triggers a push at the next
+gate, and the panel's own signature is unchanged. Cycle screens with the
+keyboard's screen-cycle shortcut (Fn + Right Shift from the factory; it is a
+VIA keycode you can move).
+
+### Multi-slot transfer layout
+
+From a capture of the official tool uploading three GIFs
+(`captures/webhid-official-3slots*.txt`): slot k starts at the first 64 KB
+boundary after slot k-1 ends, the data packets carry absolute offsets and
+skip the gaps, and the setup packet `AA 15` lists every slot:
+
+```
+aa 15 00 00 00 38 00 00 | 00 count erase 00 00 size0(u24) | 01 00 size1(u24) | 02 00 size2(u24)
+```
+
+`erase` is the number of 64 KB blocks the last byte reaches into (both
+captures agree; upstream's `+ 1` matches neither). The keyboard-side `AA E3`
+carries the same count in its last byte. `upload.sequence()` produces this
+stream as a pure list so it can be diffed against a capture before anything
+is sent; the three-slot stream matched the official tool byte for byte.
 
 ## Data sources
 

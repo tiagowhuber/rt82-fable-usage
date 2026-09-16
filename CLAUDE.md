@@ -36,15 +36,20 @@ and look at `preview_3x.png`; no device needed.
   are delta-coded (bitmap + changed blocks). See README "QGIF is DXT1".
 - Replay of the captured session: 3,184 reports, 5.6s, zero rejections.
 - Gates: 30-minute timer (was hourly until 2026-09-15) and content signature both exercised.
+- **Multi-slot push** (2026-09-16): panel + the user's two GIFs, 183,600 bytes
+  laid out at 0 / 65536 / 131072, 1,648 packets, 4.3s. `upload.sequence()`
+  diffed byte-for-byte against the official three-GIF capture first.
 - Hook returns in ~0.2s; detached child confirmed to run and release its lock.
 
 ## NOT verified
 
 - **The "not wired" path.** It is a `hid.enumerate` check that exits before
   touching anything, but it has never actually run with the keyboard absent.
-- **`screen_index` other than 0.** `upload()` takes the parameter and the
-  protocol has the field, but every test wrote slot 0. Writing to slots 1/2 to
-  preserve an existing GIF is plausible, unproven, and would need a live test.
+- Slot files larger than 64 KB (the user's are 16,840 and 52,528 bytes). The
+  layout rule (next 64 KB boundary) is a generalisation from two captures.
+- Single-slot pushes now erase `ceil(end/64K)` blocks (1 for the panel) where
+  the old code erased 2. Matches both official captures; not separately
+  pushed live since the panel always goes out with the two slots now.
 - Any firmware other than the one on this keyboard.
 
 ## Dead ends — do not retry
@@ -93,22 +98,25 @@ encoder wants 136).
   `weekly_scoped`).
 - **Threshold alerts**: leave a normal GIF up, only push a loud red panel above
   85%. Near-zero flash writes.
-- **Slot preservation**: write to slot 1 and leave the user's own GIF in slot 0.
 
 ## The official tool
 
 https://image.rdmctmzt.com/ — the Epomaker web uploader (WebHID, Chrome/Edge,
 wired mode). The protocol capture in `captures/` came from it.
 
-**A slot 0 push wipes slots 1 and 2** (tested 2026-09-16: after our push the
-user's GIFs were gone and slot cycling did nothing). The transfer setup
-packet `AA 15`, the `AA 18` erase packet and the keyboard-side `AA E3` all
-carry a *screen count* field that we, upstream, and the single-GIF capture
-all set to 1, so the firmware is told there is exactly one GIF. Fixing this
-needs a capture of the official tool uploading three GIFs:
-`captures/capture-webhid.js` is a console snippet that logs in the same
-format as the existing capture. Until then `~/.claude/rt82/PAUSED` exists and
-`push.py` skips every automatic run (`--force` still works).
+**A transfer replaces every slot.** A single-slot push wiped the user's
+GIFs in slots 1 and 2 (2026-09-16) because the count field in `AA 15` /
+`AA E3` said 1. `slots.py` now sends `slots/slot1.*` and `slots/slot2.*`
+with every push, same as the official tool. Layout details in README
+"Multi-slot transfer layout". `captures/capture-webhid.js` is the console
+snippet that produced the three-slot captures; use it again if another
+protocol question comes up. `~/.claude/rt82/PAUSED` is a kill switch for
+automatic pushes.
+
+The user's current slot GIFs were lifted straight out of the capture
+(`slots/slot1.qgif`, `slots/slot2.qgif` in the live folder, not in the repo).
+Their shortcut for cycling screens is **Fn + Home** (moved in VIA because
+Right Shift is Ctrl on this keyboard; the layout JSON is in Downloads).
 
 ## Gotchas
 
