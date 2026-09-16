@@ -98,9 +98,17 @@ encoder wants 136).
 ## The official tool
 
 https://image.rdmctmzt.com/ — the Epomaker web uploader (WebHID, Chrome/Edge,
-wired mode). The protocol capture in `captures/` came from it. Use it to load
-the user's own GIFs into slots 1 and 2; our pusher only ever writes slot 0.
-Whether a slot 0 push leaves the other slots intact is untested.
+wired mode). The protocol capture in `captures/` came from it.
+
+**A slot 0 push wipes slots 1 and 2** (tested 2026-09-16: after our push the
+user's GIFs were gone and slot cycling did nothing). The transfer setup
+packet `AA 15`, the `AA 18` erase packet and the keyboard-side `AA E3` all
+carry a *screen count* field that we, upstream, and the single-GIF capture
+all set to 1, so the firmware is told there is exactly one GIF. Fixing this
+needs a capture of the official tool uploading three GIFs:
+`captures/capture-webhid.js` is a console snippet that logs in the same
+format as the existing capture. Until then `~/.claude/rt82/PAUSED` exists and
+`push.py` skips every automatic run (`--force` still works).
 
 ## Gotchas
 

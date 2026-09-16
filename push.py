@@ -19,6 +19,7 @@ STATE = HERE / "state.json"
 LOCK = HERE / "push.lock"
 LOG = HERE / "push.log"
 QGIF_OUT = HERE / "current.qgif"
+PAUSE = HERE / "PAUSED"  # exists => never push; a kill switch that needs no edits
 
 MIN_INTERVAL = 1800      # at most one flash write per half hour
 LOCK_STALE = 300         # a lock older than this is from a crashed run
@@ -92,6 +93,11 @@ def main() -> int:
     import upload as up  # noqa: E402
 
     state = read_state()
+
+    if PAUSE.exists() and not force:
+        if verbose:
+            log("skip: PAUSED file present")
+        return 0
 
     if not force:
         since = time.time() - state.get("last_push", 0)
