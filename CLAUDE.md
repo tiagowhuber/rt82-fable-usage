@@ -95,6 +95,13 @@ encoder wants 136).
   85%. Near-zero flash writes.
 - **Slot preservation**: write to slot 1 and leave the user's own GIF in slot 0.
 
+## The official tool
+
+https://image.rdmctmzt.com/ — the Epomaker web uploader (WebHID, Chrome/Edge,
+wired mode). The protocol capture in `captures/` came from it. Use it to load
+the user's own GIFs into slots 1 and 2; our pusher only ever writes slot 0.
+Whether a slot 0 push leaves the other slots intact is untested.
+
 ## Gotchas
 
 - `~/.claude/rt82/` is the **live deployment** and an independent copy of this
